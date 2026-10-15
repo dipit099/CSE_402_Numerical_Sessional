@@ -1,0 +1,281 @@
+\documentclass[10pt,a4paper]{article}
+\usepackage[margin=1.6cm]{geometry}
+\usepackage{multicol}
+\usepackage{amsmath,amssymb,mathtools}
+\usepackage{xcolor}
+\usepackage{enumitem}
+\usepackage{parskip}
+\usepackage{array}
+
+\setlength{\columnsep}{16pt}
+\setlist[itemize]{leftmargin=1.2em,itemsep=1pt,topsep=2pt,parsep=0pt}
+\setlist[enumerate]{leftmargin=1.4em,itemsep=1pt,topsep=2pt,parsep=0pt}
+
+\definecolor{hdr}{RGB}{20,60,120}
+\definecolor{warn}{RGB}{155,25,25}
+\definecolor{good}{RGB}{20,110,60}
+\definecolor{boxbg}{RGB}{244,247,251}
+\definecolor{hardbg}{RGB}{255,248,235}
+\definecolor{solbg}{RGB}{242,249,244}
+
+\newcounter{secc}
+\renewcommand{\section}[1]{\par\vspace{7pt}\refstepcounter{secc}\noindent%
+  \colorbox{hdr}{\parbox{\dimexpr\linewidth-2\fboxsep}{\color{white}\bfseries\large\ \thesecc.\ #1}}\par\vspace{3pt}}
+\renewcommand{\subsection}[1]{\par\vspace{4pt}\noindent{\color{hdr}\bfseries #1}\par\vspace{1pt}}
+
+\newcommand{\why}[1]{{\color{good}\textbf{Why / vs previous:}} #1\par}
+\newenvironment{edge}{\par{\color{warn}\textbf{Edge cases / traps:}}\begingroup\color{warn!85!black}\begin{itemize}[leftmargin=1.2em]}{\end{itemize}\endgroup}
+
+\newenvironment{hard}%
+  {\par\vspace{3pt}\begingroup\setlength{\fboxsep}{5pt}%
+   \begin{lrbox}{\hbx}\begin{minipage}{\dimexpr\linewidth-2\fboxsep\relax}}%
+  {\end{minipage}\end{lrbox}\colorbox{hardbg}{\usebox{\hbx}}\endgroup\par\vspace{2pt}}
+\newsavebox{\hbx}
+\newenvironment{sol}%
+  {\par\vspace{2pt}\begingroup\setlength{\fboxsep}{5pt}%
+   \begin{lrbox}{\sbx}\begin{minipage}{\dimexpr\linewidth-2\fboxsep\relax}}%
+  {\end{minipage}\end{lrbox}\colorbox{solbg}{\usebox{\sbx}}\endgroup\par\vspace{4pt}}
+\newsavebox{\sbx}
+
+\setlength{\abovedisplayskip}{3pt}\setlength{\belowdisplayskip}{3pt}
+\setlength{\abovedisplayshortskip}{2pt}\setlength{\belowdisplayshortskip}{2pt}
+
+\begin{document}
+
+\begin{center}
+{\LARGE\bfseries\color{hdr} CSE 402 — Online-2 Theory Revision}\\[3pt]
+{\small Linear systems (Gaussian / Gauss--Jordan) \;\textbullet\; LU Decomposition \;\textbullet\; Power Method for Eigenpairs}\\[1pt]
+{\footnotesize All formulas in math form \;\textbullet\; method-vs-method reasoning \;\textbullet\; worked simulation problems at the end}
+\end{center}
+
+\begin{multicols}{2}
+
+% =====================================================================
+\section{Gaussian Elimination \& Gauss--Jordan}
+
+\subsection{The idea}
+Solve $Ax=b$ by row operations. Reduce the augmented matrix $[A\,|\,b]$ to triangular form, then solve.
+
+\subsection{Naive Gaussian elimination}
+Eliminate below each pivot, then back-substitute.
+\[ m_{ik}=\frac{a_{ik}}{a_{kk}}\ (i>k),\qquad R_i \leftarrow R_i-m_{ik}R_k \]
+Back-substitution (bottom-up):
+\[ x_i=\frac{1}{a_{ii}}\Bigl(b_i-\sum_{j=i+1}^{n}a_{ij}x_j\Bigr) \]
+\why{Simplest direct method. \textbf{Weakness:} breaks if a pivot $a_{kk}=0$, and loses accuracy if a pivot is merely small (the multiplier $m_{ik}$ blows up and amplifies rounding error).}
+
+\subsection{Gaussian with partial pivoting}
+Before clearing column $k$, swap up the row with the largest-magnitude pivot candidate:
+\[ p=\operatorname*{arg\,max}_{\,i\ge k}\;|a_{ik}|,\qquad R_k \leftrightarrow R_p\ (\text{and } b_k\leftrightarrow b_p) \]
+This forces $|m_{ik}|\le 1$.
+\why{\textbf{Better than naive:} same cost, but numerically \emph{stable} — bounded multipliers keep rounding error from growing. This is the default you should always use. Downside: the row searches/swaps add bookkeeping, and it still fails only if a whole column is zero (then $A$ is singular).}
+
+\subsection{Gauss--Jordan}
+Normalize each pivot to $1$ and eliminate \emph{both above and below}, giving the identity on the left; the answer is read straight off:
+\[ R_k \leftarrow \frac{R_k}{a_{kk}},\qquad R_i \leftarrow R_i-a_{ik}R_k\quad(\forall\, i\neq k) \]
+\why{\textbf{vs Gaussian:} no back-substitution needed, and it produces $A^{-1}$ directly (augment with $I$ instead of $b$). \textbf{Worse for a single solve:} $\sim n^3$ operations vs $\sim\frac{2}{3}n^3$ for Gaussian — about $50\%$ more work. Use it when you actually want the inverse or reduced form, not just $x$.}
+
+\subsection{Cost summary}
+\[ \text{Gaussian: }\tfrac{2}{3}n^3+n^2,\qquad \text{Gauss--Jordan: }\sim n^3 \]
+
+\subsection{Classifying $Ax=b$}
+After elimination inspect the rows:
+\begin{itemize}
+\item no zero row $\Rightarrow$ \textbf{unique} ($\operatorname{rank}A=n$)
+\item row $0=c,\ c\neq0$ $\Rightarrow$ \textbf{no solution}
+\item row $0=0$ $\Rightarrow$ \textbf{infinite} (free variables)
+\end{itemize}
+Rouché--Capelli: compare $\operatorname{rank}(A)$, $\operatorname{rank}([A|b])$ and $n$.
+
+\begin{edge}
+\item Zero pivot but nonzero entry below $\to$ must pivot; not an error.
+\item Small (not zero) pivot $\to$ huge $m_{ik}$ $\to$ catastrophic cancellation. Always pivot.
+\item In floating point, dividing by a $0$ pivot gives $m=\infty$, then $\infty\cdot0=$ NaN silently.
+\item Every row swap must also be applied to $b$.
+\end{edge}
+
+% =====================================================================
+\section{LU Decomposition}
+
+\subsection{The idea}
+Factor once, reuse for many right-hand sides: $A=LU$ with $L$ lower, $U$ upper triangular. \textbf{Doolittle}: $\ell_{ii}=1$. \textbf{Crout}: $u_{ii}=1$.
+\[ \ell_{ik}=\frac{u_{ik}}{u_{kk}},\qquad U_i \leftarrow U_i-\ell_{ik}U_k \]
+Here $U$ is exactly what Gaussian elimination produces; $L$ just \emph{stores the multipliers} that Gaussian elimination would have discarded.
+
+\why{\textbf{vs Gaussian elimination:} identical work for one solve, but the expensive $O(n^3)$ elimination is done once and \emph{does not depend on $b$}. For $k$ right-hand sides:
+\[ \underbrace{O(n^3+kn^2)}_{\text{LU}}\ \ll\ \underbrace{O(kn^3)}_{\text{re-run Gauss}} \]
+So LU wins big whenever you solve with the same $A$ many times (also gives cheap determinant \& inverse).}
+
+\subsection{Solving with $L,U$}
+Let $z=Ux$. Two triangular solves:
+\[ Lz=b\ \text{(forward)},\qquad Ux=z\ \text{(backward)} \]
+\[ z_i=\frac{1}{\ell_{ii}}\Bigl(b_i-\sum_{j<i}\ell_{ij}z_j\Bigr),\quad x_i=\frac{1}{u_{ii}}\Bigl(z_i-\sum_{j>i}u_{ij}x_j\Bigr) \]
+Each solve is $O(n^2)$.
+
+\subsection{Existence (no pivoting)}
+$A=LU$ exists $\iff$ every leading principal minor is nonzero (first $n-1$):
+\[ \det(A_{1:k,\,1:k})\neq 0,\quad k=1,\dots,n-1 \]
+$\det A\neq0$ alone is \emph{not} enough — e.g. $\begin{psmallmatrix}0&1\\1&0\end{psmallmatrix}$ is invertible but has a zero $1{\times}1$ minor.
+
+\subsection{LU with partial pivoting: $PA=LU$}
+$P$ = permutation recording swaps. Exists for \emph{every} invertible $A$.
+\why{\textbf{Better than plain LU:} fixes the zero-leading-minor failure and gives numerical stability ($|\ell_{ij}|\le1$), just like partial pivoting did for Gaussian elimination. \textbf{Cost:} you must now solve $Lz=Pb$ (permute $b$ first), not $Lz=b$.}
+
+\subsection{Determinant \& inverse}
+\[ \det A=(-1)^{\#\text{swaps}}\prod_{i}u_{ii} \]
+A zero on $U$'s diagonal $\Rightarrow\det A=0$ (singular). Inverse: solve $Ax=e_i$ for each unit column $e_i$; assemble the $x$'s as columns of $A^{-1}$.
+
+\subsection{Cholesky (special case)}
+If $A$ symmetric positive-definite ($A=A^T,\ x^TAx>0$):
+\[ A=LL^{T} \]
+\why{\textbf{Better than LU for SPD:} no pivoting needed (pivots stay positive) and about \emph{half} the cost ($\sim\frac{1}{3}n^3$) and half the storage. Use whenever $A$ is SPD (e.g.\ $A^TA$ in least squares, covariance matrices).}
+
+\subsection{Condition number}
+\[ \kappa(A)=\lVert A\rVert\,\lVert A^{-1}\rVert,\qquad
+\frac{\lVert\delta x\rVert}{\lVert x\rVert}\lesssim \kappa(A)\,\frac{\lVert\delta b\rVert}{\lVert b\rVert} \]
+A small residual $\lVert Ax-b\rVert$ does \emph{not} guarantee small error when $\kappa(A)$ is large (ill-conditioned).
+
+\begin{edge}
+\item Solve $Lz=Pb$, not $Lz=b$, once pivoting is used.
+\item A mid-elimination row swap must also swap the already-stored multipliers in $L$'s earlier columns.
+\item Never form $A^{-1}$ just to solve $Ax=b$ — it costs $\sim n\times$ more and worsens rounding.
+\item Zero on $U$ diagonal = singular; back-substitution divides by it.
+\end{edge}
+
+% =====================================================================
+\section{Power Method (Eigenpairs)}
+
+\subsection{The idea}
+Find eigenvalues \emph{without} the characteristic polynomial, by repeated multiplication. Any $x_0$ (with a component along $v_1$) gets stretched most along the dominant eigenvector.
+
+\subsection{Power iteration — dominant $(\lambda_1,v_1)$}
+Needs a strictly dominant eigenvalue $|\lambda_1|>|\lambda_2|\ge\cdots$
+\[ y=Ax,\qquad \lambda \approx y_{[\,\arg\max|y|\,]},\qquad x\leftarrow \frac{y}{\lambda} \]
+Convergence is linear with rate $\lvert\lambda_2/\lambda_1\rvert$. A sharper eigenvalue estimate is the \textbf{Rayleigh quotient}:
+\[ \lambda \approx \frac{x^{T}Ax}{x^{T}x} \]
+\why{Direct, matrix-free, cheap ($O(n^2)$ per step). \textbf{Limitation:} gives only the \emph{largest} eigenvalue, and slowly if $\lambda_2$ is close to $\lambda_1$.}
+
+\subsection{Inverse power — smallest $|\lambda|$}
+Eigenvalues of $A^{-1}$ are $1/\lambda$, so power-iterate on $A^{-1}$:
+\[ \lambda_{\min}(A)=\frac{1}{\lambda_{\max}(A^{-1})} \]
+In practice \emph{solve} $Ay=x$ each step (via LU) rather than forming $A^{-1}$.
+\why{\textbf{vs plain power:} targets the smallest eigenvalue, which plain power can never reach. Slightly costlier (a linear solve per step) but the LU factor is reused, so still cheap.}
+
+\subsection{Shifted inverse power — any eigenvalue near $\mu$}
+\[ \text{iterate }(A-\mu I)^{-1}\ \Rightarrow\ \text{converges to } \lambda \text{ closest to } \mu \]
+Rate $\propto \bigl\lvert\tfrac{\lambda_1-\mu}{\lambda_2-\mu}\bigr\rvert$.
+\why{\textbf{Best of the three for a targeted eigenvalue:} a good shift $\mu$ makes convergence extremely fast, and it can reach interior eigenvalues neither of the others can.}
+
+\subsection{Deflation — all eigenpairs (symmetric $A$)}
+After a converged pair, normalize $\hat v=v_1/\lVert v_1\rVert_2$ and remove it:
+\[ A' = A-\lambda_1\,\hat v\,\hat v^{\,T} \]
+Then power-iterate $A'$ for the next pair. Reconstruct $A=V\Lambda V^{-1}$.
+\why{Turns a dominant-only method into a full spectrum method. \textbf{Downside:} rounding error accumulates, so later eigenpairs are least accurate.}
+
+\begin{edge}
+\item Use the largest-\textbf{magnitude} entry (keep its sign), not \texttt{max} — a negative dominant eigenvalue breaks a plain max.
+\item $v$ and $-v$ are both valid; align signs before comparing.
+\item Fails / stalls if $|\lambda_1|=|\lambda_2|$ (e.g.\ a $\pm\lambda$ pair or complex conjugates).
+\item $x_0$ must not be orthogonal to $v_1$; normalize each step to avoid overflow.
+\item Converge on the \emph{vector}, not just the value (the value settles first).
+\item Deflation needs a \emph{unit} $\hat v$ ($\hat v^T\hat v=1$).
+\end{edge}
+
+\end{multicols}
+
+% =====================================================================
+\vspace{4pt}
+\begin{center}\colorbox{hdr}{\parbox{\dimexpr\linewidth-2\fboxsep}{\color{white}\bfseries\large\ \ Simulation / Worked Problems (with full solutions)}}\end{center}
+\vspace{4pt}
+
+\textbf{Q1 (Gaussian elimination with partial pivoting).} Solve
+\[ \begin{pmatrix} 2&1&-1\\ -3&-1&2\\ -2&1&2 \end{pmatrix}
+\begin{pmatrix}x_1\\x_2\\x_3\end{pmatrix}=\begin{pmatrix}8\\-11\\-3\end{pmatrix}. \]
+
+\begin{sol}
+\textbf{Step 1 — column 1.} Candidates $|2|,|-3|,|-2|$: largest is $-3$ (row 2). Swap $R_1\leftrightarrow R_2$:
+\[ \left[\begin{array}{ccc|c} -3&-1&2&-11\\ 2&1&-1&8\\ -2&1&2&-3 \end{array}\right] \]
+Multipliers $m_{21}=\tfrac{2}{-3}=-\tfrac23$, $m_{31}=\tfrac{-2}{-3}=\tfrac23$. Eliminate:
+\[ \left[\begin{array}{ccc|c} -3&-1&2&-11\\ 0&\tfrac13&\tfrac13&\tfrac23\\ 0&\tfrac53&\tfrac23&\tfrac{13}{3} \end{array}\right] \]
+\textbf{Step 2 — column 2.} $|\tfrac13|<|\tfrac53|$, so swap $R_2\leftrightarrow R_3$. Multiplier $m_{32}=\tfrac{1/3}{5/3}=\tfrac15$:
+\[ \left[\begin{array}{ccc|c} -3&-1&2&-11\\ 0&\tfrac53&\tfrac23&\tfrac{13}{3}\\ 0&0&\tfrac15&-\tfrac15 \end{array}\right] \]
+\textbf{Back-substitution.}
+\[ x_3=\frac{-1/5}{1/5}=-1,\quad x_2=\frac{\tfrac{13}{3}-\tfrac23(-1)}{5/3}=\frac{5}{5/3}=3,\quad x_1=\frac{-11-(-1)(3)-(2)(-1)}{-3}=2. \]
+\[ \boxed{x=(2,\,3,\,-1)} \] Note every multiplier satisfies $|m|\le1$ — the point of pivoting.
+\end{sol}
+
+\textbf{Q2 (LU decomposition — Doolittle, determinant \& solve).} For
+$A=\begin{pmatrix}2&-1&-2\\ -4&6&3\\ -4&-2&8\end{pmatrix}$, find $L,U$, then $\det A$, then solve $Ax=(-1,\,5,\,2)^T$.
+
+\begin{sol}
+\textbf{Factor.} $\ell_{21}=\tfrac{-4}{2}=-2,\ \ell_{31}=\tfrac{-4}{2}=-2$; after clearing column 1 the $(3,2)$ multiplier is $\ell_{32}=\tfrac{-4}{4}=-1$. Result:
+\[ L=\begin{pmatrix}1&0&0\\ -2&1&0\\ -2&-1&1\end{pmatrix},\quad U=\begin{pmatrix}2&-1&-2\\ 0&4&-1\\ 0&0&3\end{pmatrix}. \]
+\textbf{Determinant} (no swaps): $\det A=\prod u_{ii}=2\cdot4\cdot3=\boxed{24}.$
+
+\textbf{Solve $Lz=b$} with $b=(-1,5,2)^T$ (forward):
+\[ z_1=-1,\quad z_2=5-(-2)(-1)=3,\quad z_3=2-(-2)(-1)-(-1)(3)=3. \]
+\textbf{Solve $Ux=z$} (backward):
+\[ x_3=\tfrac{3}{3}=1,\quad x_2=\tfrac{3-(-1)(1)}{4}=1,\quad x_1=\tfrac{-1-(-1)(1)-(-2)(1)}{2}=1. \]
+\[ \boxed{x=(1,\,1,\,1)} \] (Reusing $L,U$, any new $b$ now costs only the two $O(n^2)$ solves.)
+\end{sol}
+
+\begin{multicols}{2}
+
+\textbf{Q3 (Power iteration + Rayleigh quotient).} For $A=\begin{psmallmatrix}4&1\\1&3\end{psmallmatrix}$, $x_0=(1,0)^T$, do 3 iterations; compare with the exact dominant $\lambda=\tfrac{7+\sqrt5}{2}\approx4.618$.
+
+\begin{sol}
+Scale by the largest-magnitude entry each step:
+\[ \begin{array}{c|c|c}
+k & x_k & \lambda^{(k)}=\text{max-entry of }Ax_k\\\hline
+0 & (1,\,0) & 4\\
+1 & (1,\,0.250) & 4.25\\
+2 & (1,\,0.412) & 4.412\\
+3 & (1,\,0.507) & 4.507
+\end{array} \]
+Estimates climb toward $4.618$ (rate $\lambda_2/\lambda_1\approx0.516$).
+\textbf{Rayleigh quotient} at $x_2=(1,0.412)$:
+\[ \frac{x^TAx}{x^Tx}=\frac{5.332}{1.170}\approx 4.56, \]
+already closer to $4.618$ than the max-entry estimate $4.412$ — Rayleigh converges faster.
+\end{sol}
+
+\textbf{Q4 (Inverse power — smallest eigenvalue).} Same $A=\begin{psmallmatrix}4&1\\1&3\end{psmallmatrix}$. Estimate the \emph{smallest} eigenvalue.
+
+\begin{sol}
+$A^{-1}=\tfrac{1}{11}\begin{psmallmatrix}3&-1\\-1&4\end{psmallmatrix}$ (since $\det A=11$). Power-iterate $A^{-1}$ from $x_0=(1,0)$:
+\[ (1,0)\to(0.273,-0.091)\to\ \dots\ \Rightarrow\ \lambda_{\max}(A^{-1})\approx0.420. \]
+Then
+\[ \lambda_{\min}(A)=\frac{1}{0.420}\approx 2.38=\frac{7-\sqrt5}{2}.\ \checkmark \]
+Matches the exact smaller root. (In code you would solve $Ay=x$ via LU instead of forming $A^{-1}$.)
+\end{sol}
+
+\textbf{Q5 (Deflation — second eigenpair).} Using the converged dominant pair of $A=\begin{psmallmatrix}4&1\\1&3\end{psmallmatrix}$, find $\lambda_2$ by one deflation step.
+
+\begin{sol}
+Dominant $\lambda_1=4.618$, direction $v_1\propto(1,0.618)$; normalize
+$\hat v=(0.851,\,0.526)$, so
+\[ \hat v\hat v^{T}=\begin{pmatrix}0.724&0.447\\0.447&0.276\end{pmatrix}. \]
+\[ A'=A-\lambda_1\hat v\hat v^{T}=\begin{pmatrix}0.658&-1.065\\-1.065&1.724\end{pmatrix}. \]
+Power-iterating $A'$ gives its dominant eigenvalue $\approx2.382$. Check via trace (the removed direction now has eigenvalue $0$):
+\[ \operatorname{tr}A'=0.658+1.724=2.382=\lambda_2.\ \checkmark \]
+So $\{\lambda_1,\lambda_2\}=\{4.618,\,2.382\}$, matching $\tfrac{7\pm\sqrt5}{2}$.
+\end{sol}
+
+\textbf{Q6 (Ill-conditioning — why residual can lie).} Solve
+$A=\begin{psmallmatrix}1&1\\1&1.0001\end{psmallmatrix}x=\begin{psmallmatrix}2\\2.0001\end{psmallmatrix}$,
+then change $b_2$ to $2.0002$ and resolve.
+
+\begin{sol}
+First system: subtract $R_1$ from $R_2\Rightarrow 0.0001\,x_2=0.0001\Rightarrow x_2=1,\ x_1=1$, so $x=(1,1)$.
+Perturbed: $0.0001\,x_2=0.0002\Rightarrow x_2=2,\ x_1=0$, so $x=(0,2)$.
+A change of $10^{-4}$ in $b$ moved $x$ by order $1$:
+\[ \kappa(A)\approx\frac{\lVert\delta x\rVert/\lVert x\rVert}{\lVert\delta b\rVert/\lVert b\rVert}\sim 4\times10^{4}. \]
+\textbf{Lesson:} a tiny residual $\lVert Ax-b\rVert$ does not imply an accurate $x$ when $\kappa(A)$ is large.
+\end{sol}
+
+\end{multicols}
+
+\vspace{2pt}
+\begin{center}\footnotesize\color{gray}
+One-line recall: \emph{pivot for stability \;\textbullet\; leading minors for LU existence \;\textbullet\; permute $b$ when $PA=LU$ \;\textbullet\; largest-magnitude scaling for power \;\textbullet\; never invert just to solve \;\textbullet\; check $\kappa(A)$, not just the residual.}
+\end{center}
+
+\end{document}
